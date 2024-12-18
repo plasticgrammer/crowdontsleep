@@ -1,39 +1,41 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+Description: LINE Reminder Bot with SAM
 
 Parameters:
-  LineChannelSecret:
-    Type: String
   LineChannelAccessToken:
     Type: String
+    Description: LINE Channel Access Token
+  LineChannelSecret:
+    Type: String
+    Description: LINE Channel Secret
+
+Globals:
+  Function:
+    Timeout: 29
+    Runtime: nodejs16.x
+    Environment:
+      Variables:
+        LINE_CHANNEL_ACCESS_TOKEN: !Ref LineChannelAccessToken
+        LINE_CHANNEL_SECRET: !Ref LineChannelSecret
+        DYNAMODB_TABLE: !Ref RemindersTable
 
 Resources:
-  LineWebhookFunction:
+  WebhookFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/handlers/
-      Handler: webhook.lambda_handler
-      Runtime: python3.9
-      Environment:
-        Variables:
-          LINE_CHANNEL_SECRET: !Ref LineChannelSecret
-          LINE_CHANNEL_ACCESS_TOKEN: !Ref LineChannelAccessToken
+      Handler: dist/handlers/webhook.handler
       Events:
-        WebhookApi:
+        ApiEvent:
           Type: Api
           Properties:
             Path: /webhook
             Method: post
 
-  ReminderFunction:
+  CheckRemindersFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/handlers/
-      Handler: reminder.lambda_handler
-      Runtime: python3.9
-      Environment:
-        Variables:
-          LINE_CHANNEL_ACCESS_TOKEN: !Ref LineChannelAccessToken
+      Handler: dist/handlers/check-reminders.handler
       Events:
         ScheduleEvent:
           Type: Schedule
@@ -43,16 +45,18 @@ Resources:
   RemindersTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: Reminders
       AttributeDefinitions:
-        - AttributeName: group_id
-          AttributeType: S
-        - AttributeName: reminder_id
+        - AttributeName: id
           AttributeType: S
       KeySchema:
-        - AttributeName: group_id
+        - AttributeName: id
           KeyType: HASH
-        - AttributeName: reminder_id
-          KeyType: RANGE
-      StreamSpecification:
-        StreamViewType: NEW_AND_OLD_IMAGES
+      BillingMode: PAY_PER_REQUEST
+      TimeToLiveSpecification:
+        AttributeName: TTL
+        Enabled: true
+
+Outputs:
+  WebhookApi:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"
